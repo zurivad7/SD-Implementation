@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
+import Toasts from "./Toasts";
 
 const NAV = [
   { to: "/", label: "Home", end: true },
@@ -58,6 +59,7 @@ export default function Layout() {
       <footer className="border-t border-slate-200 px-4 py-4 text-center text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
         Northwind Software is a fictional client. This is a portfolio case study.
       </footer>
+      <Toasts />
     </div>
   );
 }

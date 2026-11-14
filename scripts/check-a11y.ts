@@ -10,6 +10,9 @@ const MIN_SCORE = 95;
 const ROUTES = [
   { name: "Home", hash: "#/" },
   { name: "Dashboard", hash: "#/dashboard" },
+  // Extra coverage beyond section 10:
+  { name: "Sandbox", hash: "#/sandbox" },
+  { name: "Admin", hash: "#/admin" },
 ];
 
 const fallbackChrome = "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome";
