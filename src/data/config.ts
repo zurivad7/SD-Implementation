@@ -1,6 +1,6 @@
 // Seed configuration: groups, agents, SLA policies and routing triggers (SPEC.md sections 5 and 6).
-// Escalation rules and macros arrive with the engines in M3.
-import type { Agent, BusinessHours, Group, SlaPolicy, Trigger } from "../types";
+// Also escalation rules and macros (sections 6.4 and 6.5).
+import type { Agent, BusinessHours, EscalationRule, Group, Macro, SlaPolicy, Trigger } from "../types";
 
 export const SEED = "northwind-2026";
 
@@ -124,5 +124,50 @@ export const TRIGGERS: Trigger[] = [
     id: "t8", name: "Catch-all", order: 8, active: true,
     all: [{ field: "groupId", op: "is", value: "" }], any: [],
     actions: [{ type: "set_group", value: "tier1" }],
+  },
+];
+
+/** Section 6.4. Each rule fires once per ticket. */
+export const ESCALATION_RULES: EscalationRule[] = [
+  { id: "e1", name: "SLA warning", when: "sla_warning", actions: [{ type: "notify_lead", value: "lead" }, { type: "add_tag", value: "sla_risk" }] },
+  { id: "e2", name: "SLA breached", when: "sla_breached", actions: [{ type: "set_group", value: "escalations" }, { type: "notify_lead", value: "lead" }] },
+  { id: "e3", name: "Reopened twice", when: "reopened_twice", actions: [{ type: "add_tag", value: "repeat_contact" }, { type: "notify_lead", value: "lead" }] },
+  { id: "e4", name: "Bad CSAT", when: "bad_csat", actions: [{ type: "add_tag", value: "csat_followup" }, { type: "add_internal_note", value: "Lead to review within 1 business day." }] },
+];
+
+/**
+ * Section 6.5: 6 macros. One per category except "other" (5), plus "Request more info".
+ * Replies support {{customer.name}} and {{ticket.id}}.
+ */
+export const MACROS: Macro[] = [
+  {
+    id: "m1", name: "License activation: reset and retry",
+    reply: "Hi {{customer.name}}, I have reset the activations on your license. Please open the program, choose Activate and enter your key again. Reply to ticket {{ticket.id}} if it still fails.",
+    actions: [{ type: "set_status", value: "pending" }, { type: "add_tag", value: "activation_reset" }],
+  },
+  {
+    id: "m2", name: "Download and install: new link",
+    reply: "Hi {{customer.name}}, here is a new download link that works for 7 days. Please uninstall the old version first, then run the new installer as an administrator. Reply to ticket {{ticket.id}} if you need more help.",
+    actions: [{ type: "set_status", value: "pending" }, { type: "add_tag", value: "new_link_sent" }],
+  },
+  {
+    id: "m3", name: "Billing: invoice sent",
+    reply: "Hi {{customer.name}}, I have sent the corrected invoice to your email address. You can also download it from your account under Orders. Ticket {{ticket.id}} is now solved.",
+    actions: [{ type: "set_status", value: "solved" }, { type: "add_tag", value: "invoice_sent" }],
+  },
+  {
+    id: "m4", name: "Refund: approved",
+    reply: "Hi {{customer.name}}, your refund is approved. The money will be back on your original payment method within 5 to 10 business days. Ticket {{ticket.id}} is now solved.",
+    actions: [{ type: "set_status", value: "solved" }, { type: "add_tag", value: "refund_approved" }],
+  },
+  {
+    id: "m5", name: "Account access: verify identity",
+    reply: "Hi {{customer.name}}, to protect your account we need to confirm it is you. Please reply with your order number and the last 4 digits of your license key. Ticket {{ticket.id}}.",
+    actions: [{ type: "set_status", value: "pending" }, { type: "add_tag", value: "security_check" }],
+  },
+  {
+    id: "m6", name: "Request more info",
+    reply: "Hi {{customer.name}}, thanks for your message. To help you faster, please send a screenshot of the error and tell us which product and version you use. Ticket {{ticket.id}}.",
+    actions: [{ type: "set_status", value: "pending" }],
   },
 ];

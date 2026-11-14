@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { containsPhrase, generate, GO_LIVE_DAY_INDEX, serialize, WEEKDAY_VOLUME, WEEKEND_VOLUME, type SeedData } from "../src/data/generator";
+import { generate, GO_LIVE_DAY_INDEX, serialize, WEEKDAY_VOLUME, WEEKEND_VOLUME, type SeedData } from "../src/data/generator";
 import { amsterdamParts } from "../src/engine/businessTime";
 import { TEMPLATES } from "../src/data/templates";
+import { containsPhrase } from "../src/engine/routing";
 
 const SEED_PATH = join(__dirname, "..", "src", "data", "seed.json");
 const committedText = readFileSync(SEED_PATH, "utf8");

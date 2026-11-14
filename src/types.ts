@@ -104,8 +104,9 @@ export interface Condition {
   value: string | string[];
 }
 
+/** "add_internal_note" is added to the spec union: the bad CSAT escalation (section 6.4) creates a note. */
 export interface Action {
-  type: "set_group" | "set_priority" | "add_tag" | "set_status" | "notify_lead";
+  type: "set_group" | "set_priority" | "add_tag" | "set_status" | "notify_lead" | "add_internal_note";
   value: string;
 }
 

@@ -7,9 +7,12 @@
 // ticket audit measures against the new targets.
 import seedrandom from "seedrandom";
 import type {
-  Agent, Category, Channel, Customer, Group, Priority, SlaPolicy, Status, Ticket, TicketEvent, Tier, Trigger,
+  Agent, Category, Channel, Customer, Group, Priority, SlaPolicy, Status, Ticket, TicketEvent, Tier,
 } from "../types";
-import { addBusinessMinutes, amsterdamParts, amsterdamToUtc, businessMinutesBetween, MINUTE_MS } from "../engine/businessTime";
+import { addBusinessMinutes, amsterdamParts, amsterdamToUtc, MINUTE_MS } from "../engine/businessTime";
+import { iso, statusSentence } from "../engine/events";
+import { groupName, runTriggers } from "../engine/routing";
+import { instantAtActiveMinutes, selectPolicy, slaEventDetail, type Segment } from "../engine/sla";
 import { AGENTS, GROUPS, SEED, SHIFTS, SLA_POLICIES, TRIGGERS } from "./config";
 import { CSAT_COMMENTS, DEVICES, EMAIL_DOMAINS, NAMES, PRODUCTS, TEMPLATES, URGENT_SENTENCES } from "./templates";
 
@@ -60,9 +63,7 @@ const LANGUAGE_WEIGHTS: Array<["en" | "nl" | "de", number]> = [["nl", 40], ["de"
 /** Amsterdam hour 0 to 23. Peaks 09:00 to 12:00 and 14:00 to 16:00. */
 const HOUR_WEIGHTS = [0.3, 0.2, 0.15, 0.15, 0.2, 0.4, 0.8, 1.6, 3.5, 7, 7.5, 7, 4.5, 4.2, 6.8, 6.8, 4.2, 3.2, 2.4, 2, 1.6, 1.2, 0.8, 0.5];
 
-const PRIORITY_RANK: Record<Priority, number> = { low: 0, normal: 1, high: 2, urgent: 3 };
 const CHANNEL_LABEL: Record<Channel, string> = { email: "email", web_form: "web form", chat: "chat", phone: "phone" };
-const STATUS_LABEL: Record<Status, string> = { new: "New", open: "Open", pending: "Pending", on_hold: "On-hold", solved: "Solved", closed: "Closed" };
 
 type Rng = () => number;
 
@@ -78,7 +79,6 @@ function weighted<T>(rng: Rng, items: Array<[T, number]>): T {
 const pick = <T,>(rng: Rng, list: readonly T[]): T => list[Math.floor(rng() * list.length)]!;
 const intBetween = (rng: Rng, min: number, max: number) => min + Math.floor(rng() * (max - min + 1));
 const between = (rng: Rng, min: number, max: number) => min + rng() * (max - min);
-const iso = (ms: number) => new Date(Math.round(ms / 1000) * 1000).toISOString().replace(".000Z", "Z");
 
 function shuffle<T>(rng: Rng, list: T[]): T[] {
   for (let i = list.length - 1; i > 0; i--) {
@@ -135,84 +135,8 @@ function customerSlots(rng: Rng, customers: Customer[], ticketCount: number): Cu
 
 // ---------------------------------------------------------------- routing (after go-live)
 
-/** Whole-word, case-insensitive match. "down" matches "is down" but not "download". */
-export function containsPhrase(text: string, phrase: string): boolean {
-  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
-}
-
-interface DraftTicket {
-  body: string;
-  category: Category;
-  priority: Priority;
-  groupId: string | null;
-  tags: string[];
-  tier: Tier;
-  language: Customer["language"];
-}
-
-function fieldValue(t: DraftTicket, field: string): string {
-  switch (field) {
-    case "customer.tier": return t.tier;
-    case "customer.language": return t.language;
-    case "body": return t.body;
-    case "category": return t.category;
-    case "priority": return t.priority;
-    case "groupId": return t.groupId ?? "";
-    default: return "";
-  }
-}
-
-function conditionMatches(t: DraftTicket, c: Trigger["all"][number]): boolean {
-  const actual = fieldValue(t, c.field);
-  const values = Array.isArray(c.value) ? c.value : [c.value];
-  switch (c.op) {
-    case "is": return actual === values[0];
-    case "is_not": return actual !== values[0];
-    case "in": return values.includes(actual);
-    case "contains": return values.some((v) => containsPhrase(actual, v));
-  }
-}
-
-const groupName = (id: string | null) => GROUPS.find((g) => g.id === id)?.name ?? "none";
-
-/** Runs the section 6.2 triggers once, in order. Returns rule_fired details. */
-function runTriggers(t: DraftTicket): Array<{ ruleId: string; detail: string }> {
-  const fired: Array<{ ruleId: string; detail: string }> = [];
-  let groupSet = false;
-  for (const trigger of [...TRIGGERS].sort((a, b) => a.order - b.order)) {
-    if (!trigger.active) continue;
-    const allOk = trigger.all.every((c) => conditionMatches(t, c));
-    const anyOk = trigger.any.length === 0 || trigger.any.some((c) => conditionMatches(t, c));
-    if (!allOk || !anyOk) continue;
-    const done: string[] = [];
-    for (const a of trigger.actions) {
-      if (a.type === "set_priority") {
-        const target = a.value as Priority;
-        if (PRIORITY_RANK[target] > PRIORITY_RANK[t.priority]) {
-          done.push(`set priority to ${target}`);
-          t.priority = target;
-        }
-      } else if (a.type === "set_group") {
-        if (!groupSet) {
-          t.groupId = a.value;
-          groupSet = true;
-          done.push(`set group to ${groupName(a.value)}`);
-        }
-      } else if (a.type === "add_tag") {
-        if (!t.tags.includes(a.value)) t.tags.push(a.value);
-        done.push(`added tag ${a.value}`);
-      } else if (a.type === "notify_lead") {
-        done.push("notified the lead");
-      }
-    }
-    fired.push({ ruleId: trigger.id, detail: `Trigger "${trigger.name}" fired: ${done.length ? done.join(", ") : "no change needed"}.` });
-  }
-  return fired;
-}
-
-function slaPolicyFor(tier: Tier): SlaPolicy {
-  return SLA_POLICIES.find((p) => p.match.every((c) => c.field === "customer.tier" && c.value === tier)) ?? SLA_POLICIES[SLA_POLICIES.length - 1]!;
+function slaPolicyFor(customer: Customer, ticket: Ticket): SlaPolicy {
+  return selectPolicy(ticket, customer, SLA_POLICIES) ?? SLA_POLICIES[SLA_POLICIES.length - 1]!;
 }
 
 // ---------------------------------------------------------------- assignment
@@ -246,23 +170,6 @@ function leadAt(ms: number): Agent {
 }
 
 // ---------------------------------------------------------------- SLA instants
-
-interface Segment { from: number; to: number } // intervals when the SLA clock runs
-
-/** The instant when `minutes` business minutes have run across the active segments, or null. */
-function instantAtActiveMinutes(segments: Segment[], minutes: number, policy: SlaPolicy): number | null {
-  let left = minutes;
-  for (const s of segments) {
-    const end = addBusinessMinutes(s.from, left, policy.businessHours);
-    if (end <= s.to) return end;
-    left -= businessMinutesBetween(s.from, s.to, policy.businessHours);
-  }
-  return null;
-}
-
-function formatTarget(mins: number): string {
-  return mins < 60 ? `${mins} min` : `${mins / 60} h`;
-}
 
 // ---------------------------------------------------------------- tickets
 
@@ -326,24 +233,30 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
     raw.push({ ms, at: iso(ms), ...e, seq: raw.length, ...(fx ? { fx } : {}) });
 
   // ---- routing
-  const draft: DraftTicket = { body, category, priority: reported, groupId: null, tags: [], tier: customer.tier, language: customer.language };
+  const stub: Ticket = {
+    id, subject, body, channel, category, priority: reported, status: "new", customerId: customer.id,
+    groupId: null, assigneeId: null, tags: [], createdAt: iso(createdMs), firstReplyAt: null, solvedAt: null,
+    slaPolicyId: null, events: [], csat: null,
+  };
+  let priority: Priority = reported;
+  let routedGroup = "tier1"; // Before go-live: one shared queue.
+  let routedTags: string[] = [];
   if (after) {
-    for (const f of runTriggers(draft)) {
-      add(createdMs, { type: "rule_fired", actor: "system", detail: f.detail, ruleId: f.ruleId });
-    }
-  } else {
-    draft.groupId = "tier1"; // Before go-live: one shared queue.
+    const run = runTriggers(stub, customer, TRIGGERS, GROUPS, createdMs);
+    for (const f of run.fired) add(createdMs, { type: "rule_fired", actor: "system", detail: f.detail, ruleId: f.ruleId });
+    priority = run.ticket.priority;
+    routedGroup = run.ticket.groupId ?? "tier1";
+    routedTags = run.ticket.tags;
   }
-  const routedGroup = draft.groupId ?? "tier1";
   // The created event carries the routing result, so the fields are right even before assignment.
   raw.unshift({
     ms: createdMs, at: iso(createdMs), seq: -1, type: "created", actor: "customer",
     detail: `Customer created the ticket by ${CHANNEL_LABEL[channel]}.`,
-    fx: { status: "new", groupId: routedGroup, tags: [...draft.tags] },
+    fx: { status: "new", groupId: routedGroup, tags: [...routedTags] },
   });
 
-  const policy = slaPolicyFor(customer.tier);
-  const target = policy.targets[draft.priority];
+  const policy = slaPolicyFor(customer, { ...stub, priority });
+  const target = policy.targets[priority];
   const hours = policy.businessHours;
   const odds = breachOdds(dayIndex);
   const breachFirst = rng() < odds.first;
@@ -436,9 +349,7 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
       type: h.kind,
       actor: "system",
       ruleId: policy.id,
-      detail: h.kind === "sla_warning"
-        ? `${policy.name} SLA warning: 25% of the ${formatTarget(mins)} ${h.which} target is left.`
-        : `${policy.name} SLA breached: the ${formatTarget(mins)} ${h.which} target has passed.`,
+      detail: slaEventDetail(policy, h.kind, h.which === "first reply" ? "first_reply" : "resolution", mins),
     });
     if (!after) continue; // No escalation rules before go-live.
     if (h.kind === "sla_warning" && !warned) {
@@ -491,7 +402,7 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
     add(o.ms, {
       type: "assigned",
       actor: "system",
-      detail: `${i === 0 ? "Assigned" : "Reassigned"} to ${o.agent.name} in ${groupName(o.groupId)}.`,
+      detail: `${i === 0 ? "Assigned" : "Reassigned"} to ${o.agent.name} in ${groupName(GROUPS, o.groupId)}.`,
     }, { assigneeId: o.agent.id, groupId: o.groupId });
   });
   const replier = ownerAt(firstReplyMs);
@@ -508,7 +419,7 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
     add(s.ms, {
       type: "status_changed",
       actor,
-      detail: s.detail ? s.detail(who?.name ?? "") : `Status changed from ${STATUS_LABEL[status]} to ${STATUS_LABEL[s.to]}.`,
+      detail: s.detail ? s.detail(who?.name ?? "") : statusSentence(status, s.to),
     }, { status: s.to });
     status = s.to;
   }
@@ -542,7 +453,7 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
     body,
     channel,
     category,
-    priority: draft.priority,
+    priority,
     status: finalStatus,
     customerId: customer.id,
     groupId,
