@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import Placeholder from "../components/Placeholder";
+import { useTour } from "../store/useTour";
 
 const PROOF_LINKS = [
   { to: "/sandbox", title: "Sandbox", text: "Create a ticket. Watch routing, SLA timers and escalations fire." },
@@ -8,10 +8,11 @@ const PROOF_LINKS = [
 ];
 
 export default function Home() {
+  const startTour = useTour((s) => s.start);
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
       {/* Draft claim from SPEC.md section 9. Eric confirms the final text before M6. */}
-      <h1 className="max-w-3xl text-3xl font-bold leading-tight sm:text-4xl">
+      <h1 className="max-w-3xl text-3xl font-bold leading-tight sm:text-4xl" data-tour="claim">
         I take customer service operations from messy inbox to measured go-live. This demo shows how.
       </h1>
       <ul className="mt-8 grid gap-4 sm:grid-cols-3">
@@ -27,8 +28,11 @@ export default function Home() {
           </li>
         ))}
       </ul>
-      <div className="mt-8">
-        <Placeholder milestone="M6" what="the 5-minute demo button" />
+      <div className="mt-8 flex flex-wrap items-center gap-4">
+        <button type="button" onClick={startTour} className="rounded-md bg-accent-600 px-5 py-2.5 font-semibold text-white hover:bg-accent-700">
+          5-minute demo
+        </button>
+        <p className="text-slate-700 dark:text-slate-300">A guided tour in 6 steps. It adds one example ticket to your sandbox.</p>
       </div>
     </div>
   );

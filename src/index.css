@@ -18,3 +18,17 @@ body {
 .dark :focus-visible {
   outline-color: #8fb0f5;
 }
+
+/* 5-minute demo: the highlighted element. Outline plus a soft halo; works in both themes. */
+.tour-highlight {
+  scroll-margin-top: 5rem; /* clear of the sticky synthetic banner */
+  outline: 3px solid #2856c7;
+  outline-offset: 6px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 10px rgba(40, 86, 199, 0.15);
+  transition: box-shadow 0.2s;
+}
+.dark .tour-highlight {
+  outline-color: #8fb0f5;
+  box-shadow: 0 0 0 10px rgba(143, 176, 245, 0.2);
+}

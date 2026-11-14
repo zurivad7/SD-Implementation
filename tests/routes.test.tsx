@@ -20,6 +20,7 @@ describe("routes (SPEC section 9)", () => {
     ["/admin", /^Admin$/, true],
     ["/dashboard", /KPI dashboard/, true],
     ["/case-study/1", /1\. Client brief/, false],
+    ["/case-study/2", /2\. Discovery/, true],
     ["/case-study/8", /8\. Retrospective/, false],
     ["/about", /About Eric/, false],
   ];

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
@@ -24,12 +25,19 @@ const shortDay = (day: string) => `${Number(day.slice(8))} ${["Jan", "Feb", "Mar
 export default function Dashboard() {
   const sandboxTickets = useDesk((s) => s.tickets);
   const sandboxCustomers = useDesk((s) => s.customers);
-  const [from, setFrom] = useState(meta.startDate);
-  const [to, setTo] = useState("");
-  const [channel, setChannel] = useState<Channel | "">("");
-  const [category, setCategory] = useState<Category | "">("");
-  const [tier, setTier] = useState<Tier | "">("");
-  const [groupId, setGroupId] = useState("");
+  // Links can open the dashboard with filters set, for example #/dashboard?from=2026-10-15&to=2026-10-28.
+  const [params] = useSearchParams();
+  const param = <T extends string>(key: string, allowed: readonly T[]): T | "" => {
+    const v = params.get(key);
+    return v && (allowed as readonly string[]).includes(v) ? (v as T) : "";
+  };
+  const isDay = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const [from, setFrom] = useState(isDay(params.get("from")) ?? meta.startDate);
+  const [to, setTo] = useState(isDay(params.get("to")) ?? "");
+  const [channel, setChannel] = useState<Channel | "">(param("channel", CHANNELS));
+  const [category, setCategory] = useState<Category | "">(param("category", Object.keys(CATEGORY_LABEL) as Category[]));
+  const [tier, setTier] = useState<Tier | "">(param("tier", Object.keys(TIER_LABEL) as Tier[]));
+  const [groupId, setGroupId] = useState(param("group", GROUPS.map((g) => g.id)));
   const [includeSandbox, setIncludeSandbox] = useState(false);
   const dark = useIsDark();
   const theme = chartTheme(dark);
@@ -149,7 +157,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section aria-labelledby="kpi-heading" className="mt-6">
+      <section aria-labelledby="kpi-heading" className="mt-6" data-tour="kpis">
         <h2 id="kpi-heading" className="text-lg font-semibold">KPIs: after go-live compared with before</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {TILES.map((spec) => <KpiTile key={spec.key} spec={spec} before={data.before[spec.key]} after={data.after[spec.key]} />)}

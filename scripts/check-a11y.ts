@@ -13,6 +13,8 @@ const ROUTES = [
   // Extra coverage beyond section 10:
   { name: "Sandbox", hash: "#/sandbox" },
   { name: "Admin", hash: "#/admin" },
+  { name: "Case study (plan)", hash: "#/case-study/4" },
+  { name: "About", hash: "#/about" },
 ];
 
 const fallbackChrome = "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome";
@@ -35,7 +37,7 @@ try {
     const ok = score >= MIN_SCORE;
     if (!ok) failed = true;
     console.log(`  [${ok ? "PASS" : "FAIL"}] ${route.name} accessibility ${score} (minimum ${MIN_SCORE})`);
-    if (!ok && result) {
+    if (score < 100 && result) {
       for (const audit of Object.values(result.lhr.audits)) {
         if (audit.score === 0) console.log(`        ${audit.id}: ${audit.title}`);
       }

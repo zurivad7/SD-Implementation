@@ -63,7 +63,7 @@ export default function TicketDetail() {
         </p>
       )}
 
-      <section aria-labelledby="sla-heading" className="mt-6">
+      <section aria-labelledby="sla-heading" className="mt-6" data-tour="sla">
         <h2 id="sla-heading" className="text-lg font-semibold">SLA timers</h2>
         <div className="mt-2 flex flex-wrap gap-2">
           {timers.length ? timers.map((timer) => <SlaBadge key={timer.metric} timer={timer} />) : <p>No SLA policy applies.</p>}
@@ -119,7 +119,7 @@ export default function TicketDetail() {
           )}
         </div>
 
-        <section aria-labelledby="timeline-heading">
+        <section aria-labelledby="timeline-heading" data-tour="timeline">
           <h2 id="timeline-heading" className="text-lg font-semibold">Timeline</h2>
           <div className="mt-3"><Timeline events={t.events} /></div>
         </section>

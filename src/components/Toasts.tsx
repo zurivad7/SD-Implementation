@@ -22,7 +22,7 @@ function ToastItem({ toast }: { toast: Toast }) {
 export default function Toasts() {
   const toasts = useDesk((s) => s.toasts);
   return (
-    <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-40 w-[min(24rem,calc(100vw-2rem))]">
+    <div role="status" aria-live="polite" className="pointer-events-none fixed right-4 top-4 z-40 w-[min(24rem,calc(100vw-2rem))] sm:bottom-4 sm:top-auto">
       <ul className="pointer-events-auto flex flex-col gap-2">
         {toasts.slice(-3).map((t) => <ToastItem key={t.key} toast={t} />)}
       </ul>

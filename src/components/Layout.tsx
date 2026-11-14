@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
+import DemoTour from "./DemoTour";
 import Toasts from "./Toasts";
 
 const NAV = [
@@ -60,6 +61,7 @@ export default function Layout() {
         Northwind Software is a fictional client. This is a portfolio case study.
       </footer>
       <Toasts />
+      <DemoTour />
     </div>
   );
 }

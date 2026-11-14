@@ -60,7 +60,7 @@ export default function CreateTicketForm() {
   }
 
   return (
-    <form onSubmit={submit} aria-labelledby="create-heading" className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+    <form onSubmit={submit} aria-labelledby="create-heading" className="rounded-lg border border-slate-200 p-4 dark:border-slate-700" data-tour="create">
       <h2 id="create-heading" className="text-lg font-semibold">Create a ticket</h2>
 
       <div className="mt-3 flex flex-wrap items-end gap-2 rounded-md bg-accent-50 p-3 dark:bg-slate-900">
