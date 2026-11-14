@@ -144,7 +144,7 @@ The data tells a story: the first 14 days are "before go-live" and the last 16 d
 | Parameter | Value |
 | --- | --- |
 | Period | 30 days, ending the day before the build date |
-| Volume | 120 to 180 tickets per weekday, 50 to 80 per weekend day |
+| Volume | 145 to 205 tickets per weekday, 65 to 95 per weekend day (about 4,500 in 30 days) |
 | Hourly shape | Peak 09:00 to 12:00 and 14:00 to 16:00 Amsterdam time |
 | Channels | Email 45%, web form 30%, chat 20%, phone 5% |
 | Categories | License activation 30%, download/install 25%, billing 20%, refund 10%, account access 10%, other 5% |
