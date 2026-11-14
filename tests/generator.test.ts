@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { containsPhrase, generate, GO_LIVE_DAY_INDEX, serialize, type SeedData } from "../src/data/generator";
+import { containsPhrase, generate, GO_LIVE_DAY_INDEX, serialize, WEEKDAY_VOLUME, WEEKEND_VOLUME, type SeedData } from "../src/data/generator";
 import { amsterdamParts } from "../src/engine/businessTime";
 import { TEMPLATES } from "../src/data/templates";
 
@@ -101,13 +101,19 @@ describe("generator: volumes and mix (SPEC section 5)", () => {
     expect(days[GO_LIVE_DAY_INDEX]).toBe(committed.meta.goLiveDate);
   });
 
-  it("has 120 to 180 tickets per weekday and 50 to 80 per weekend day", () => {
+  it("has about 4,500 tickets in total", () => {
+    expect(T.length).toBeGreaterThan(4300);
+    expect(T.length).toBeLessThan(4700);
+  });
+
+  it(`has ${WEEKDAY_VOLUME.min} to ${WEEKDAY_VOLUME.max} tickets per weekday and ${WEEKEND_VOLUME.min} to ${WEEKEND_VOLUME.max} per weekend day`, () => {
     const counts = new Map<string, number>();
     for (const t of T) counts.set(dayKey(t.createdAt), (counts.get(dayKey(t.createdAt)) ?? 0) + 1);
     for (const [day, n] of counts) {
       const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
-      if (weekday === 0 || weekday === 6) expect(n, day).toBeGreaterThanOrEqual(50), expect(n, day).toBeLessThanOrEqual(80);
-      else expect(n, day).toBeGreaterThanOrEqual(120), expect(n, day).toBeLessThanOrEqual(180);
+      const range = weekday === 0 || weekday === 6 ? WEEKEND_VOLUME : WEEKDAY_VOLUME;
+      expect(n, day).toBeGreaterThanOrEqual(range.min);
+      expect(n, day).toBeLessThanOrEqual(range.max);
     }
   });
 

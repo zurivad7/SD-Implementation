@@ -43,6 +43,12 @@ export const DAYS = 30;
 export const GO_LIVE_DAY_INDEX = 14; // zero-based: day 15
 export const CUSTOMER_COUNT = 1800;
 export const REPEAT_CUSTOMER_SHARE = 0.2;
+/**
+ * Tickets per day. Raised from the spec's 120 to 180 and 50 to 80 (Eric's decision) so the
+ * 30-day total reaches about 4,500. Weekend days stay at under half of a weekday.
+ */
+export const WEEKDAY_VOLUME = { min: 145, max: 205 } as const;
+export const WEEKEND_VOLUME = { min: 65, max: 95 } as const;
 
 const CHANNEL_WEIGHTS: Array<[Channel, number]> = [["email", 45], ["web_form", 30], ["chat", 20], ["phone", 5]];
 const CATEGORY_WEIGHTS: Array<[Category, number]> = [
@@ -570,7 +576,8 @@ export function generate(options: GeneratorOptions): SeedData {
   const created: Array<{ ms: number; dayIndex: number }> = [];
   days.forEach((day, dayIndex) => {
     const weekend = day.weekday === 0 || day.weekday === 6;
-    const count = weekend ? intBetween(rng, 50, 80) : intBetween(rng, 120, 180);
+    const volume = weekend ? WEEKEND_VOLUME : WEEKDAY_VOLUME;
+    const count = intBetween(rng, volume.min, volume.max);
     const hourItems = HOUR_WEIGHTS.map((w, h) => [h, weekend && h >= 9 && h <= 16 ? w * 0.8 : w] as [number, number]);
     for (let i = 0; i < count; i++) {
       const hour = weighted(rng, hourItems);
