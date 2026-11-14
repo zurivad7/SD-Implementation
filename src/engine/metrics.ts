@@ -4,7 +4,7 @@
 import type { BusinessHours, Channel, Category, Customer, Group, SlaPolicy, Status, Ticket, Tier } from "../types";
 import { amsterdamParts, amsterdamToUtc, businessMinutesBetween } from "./businessTime";
 import { parseStatusChange } from "./events";
-import { statusIntervals } from "./sla";
+import { clockMinutes } from "./sla";
 
 export const CHANNELS: Channel[] = ["email", "web_form", "chat", "phone"];
 
@@ -12,7 +12,7 @@ export const CHANNELS: Channel[] = ["email", "web_form", "chat", "phone"];
 export const KPI_DEFINITIONS = {
   ticketsCreated: "Count of tickets by createdAt.",
   medianFirstReplyMins: "Business minutes from createdAt to firstReplyAt, median.",
-  medianResolutionMins: "Business minutes from createdAt to solvedAt, pending time excluded, median.",
+  medianResolutionMins: "Business minutes from createdAt to solvedAt, pending and on-hold time excluded, median.",
   slaBreachRate: "Tickets with any sla_breached event / tickets with an SLA policy.",
   csat: "Good ratings / all ratings, as %.",
   reassignmentRate: "Tickets with more than 1 assigned event / all tickets.",
@@ -51,13 +51,13 @@ export function firstReplyMins(t: Ticket, policies: SlaPolicy[]): number | null 
   return businessMinutesBetween(Date.parse(t.createdAt), Date.parse(t.firstReplyAt), hoursFor(t, policies));
 }
 
-/** Business minutes from createdAt to solvedAt, without the time spent in pending. */
+/**
+ * Business minutes from createdAt to solvedAt, without time in pending or on_hold, or time spent
+ * solved before a reopen. Uses the same function as the SLA resolution clock.
+ */
 export function resolutionMins(t: Ticket, policies: SlaPolicy[]): number | null {
-  if (!t.solvedAt) return null;
-  const hours = hoursFor(t, policies);
-  return statusIntervals(t, Date.parse(t.solvedAt))
-    .filter((s) => s.status !== "pending")
-    .reduce((sum, s) => sum + businessMinutesBetween(s.from, s.to, hours), 0);
+  if (!t.solvedAt || (t.status !== "solved" && t.status !== "closed")) return null;
+  return clockMinutes(t, "resolution", hoursFor(t, policies), Date.parse(t.solvedAt));
 }
 
 export const isBreached = (t: Ticket) => t.events.some((e) => e.type === "sla_breached");

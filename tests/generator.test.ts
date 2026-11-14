@@ -4,6 +4,8 @@ import { generate, GO_LIVE_DAY_INDEX, serialize, WEEKDAY_VOLUME, WEEKEND_VOLUME,
 import { amsterdamParts } from "../src/engine/businessTime";
 import { TEMPLATES } from "../src/data/templates";
 import { containsPhrase } from "../src/engine/routing";
+import { slaEventsDue } from "../src/engine/sla";
+import { SLA_POLICIES } from "../src/data/config";
 
 const SEED_PATH = join(__dirname, "..", "src", "data", "seed.json");
 const committedText = readFileSync(SEED_PATH, "utf8");
@@ -192,5 +194,20 @@ describe("keyword matching", () => {
     expect(containsPhrase("The download link has expired.", "down")).toBe(false);
     expect(containsPhrase("My whole team cannot work.", "cannot work")).toBe(true);
     expect(containsPhrase("We have an OUTAGE.", "outage")).toBe(true);
+  });
+});
+
+describe("generator agrees with the SLA engine", () => {
+  it("every seeded SLA warning and breach matches what the engine computes", () => {
+    const end = Date.parse(committed.meta.dataEndsAt);
+    const mismatches: string[] = [];
+    for (const t of T) {
+      const policy = SLA_POLICIES.find((p) => p.id === t.slaPolicyId)!;
+      const stripped = { ...t, events: t.events.filter((e) => e.type !== "sla_warning" && e.type !== "sla_breached") };
+      const expected = slaEventsDue(stripped, policy, end).map((e) => `${e.type} ${e.at} ${e.detail}`).sort();
+      const actual = t.events.filter((e) => e.type === "sla_warning" || e.type === "sla_breached").map((e) => `${e.type} ${e.at} ${e.detail}`).sort();
+      if (JSON.stringify(expected) !== JSON.stringify(actual)) mismatches.push(`#${t.id}: seed ${JSON.stringify(actual)} engine ${JSON.stringify(expected)}`);
+    }
+    expect(mismatches.slice(0, 5)).toEqual([]);
   });
 });

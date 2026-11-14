@@ -130,3 +130,41 @@ describe("SLA: warning at 25% left, breach at 0%", () => {
     expect(slaTimer(replied, ENTERPRISE, "first_reply", created + 60 * MIN).state).toBe("met");
   });
 });
+
+describe("SLA: reopened tickets", () => {
+  // Enterprise, urgent, 24x7: first reply 30 min, resolution 4 h (240 min).
+  const created = Date.parse("2026-11-09T10:00:00Z");
+  const m = (mins: number) => iso(created + mins * MIN);
+  const solvedThenReopened = ticket({
+    createdAt: m(0), priority: "urgent", slaPolicyId: ENTERPRISE.id, status: "open", firstReplyAt: m(20), solvedAt: null,
+    events: [
+      { at: m(0), type: "created", actor: "customer", detail: "Customer created the ticket by email." },
+      ev.reply(m(20)), ev.status(m(20), "new", "open"),
+      ev.status(m(100), "open", "solved"), // 100 min on the clock
+      ev.status(m(400), "solved", "open"), // reopened 5 h later
+    ],
+  });
+
+  it("the resolution clock does not run while the ticket is solved", () => {
+    const solved = { ...solvedThenReopened, status: "solved" as const, solvedAt: m(100), events: solvedThenReopened.events.slice(0, 4) };
+    expect(slaTimer(solved, ENTERPRISE, "resolution", created + 300 * MIN)).toMatchObject({ elapsedMins: 100, stopped: true, state: "met" });
+  });
+
+  it("continues from the saved total after a reopen. It does not restart.", () => {
+    const timer = slaTimer(solvedThenReopened, ENTERPRISE, "resolution", created + 430 * MIN);
+    expect(timer.elapsedMins).toBe(130); // 100 before the solve + 30 since the reopen
+    expect(timer.stopped).toBe(false);
+  });
+
+  it("writes the warning and breach at the right moment after a reopen", () => {
+    // 75% of 240 = 180 min: 100 before, 80 after the reopen at 400 -> 480. Breach at 240: 400 + 140 = 540.
+    const events = slaEventsDue(solvedThenReopened, ENTERPRISE, created + 600 * MIN).filter((e) => e.detail.includes("resolution"));
+    expect(events.map((e) => [e.type, e.at])).toEqual([["sla_warning", m(480)], ["sla_breached", m(540)]]);
+  });
+
+  it("a met first reply target stays met", () => {
+    const timer = slaTimer(solvedThenReopened, ENTERPRISE, "first_reply", created + 600 * MIN);
+    expect(timer).toMatchObject({ elapsedMins: 20, state: "met", stopped: true });
+    expect(slaEventsDue(solvedThenReopened, ENTERPRISE, created + 600 * MIN).some((e) => e.detail.includes("first reply"))).toBe(false);
+  });
+});

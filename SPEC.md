@@ -2,6 +2,10 @@
 
 Nov 14, 2026 · @Ekpenyong
 
+**Changelog**
+
+- v1.1: trigger fire-once guard, 6 macros (5 categories + Request more info), add_internal_note action, no SLA clock when solved or closed, KPI excludes on_hold, reopen continues clock.
+
 ## 1. Purpose and success test
 
 The app proves one claim: Eric can take a customer service operation from intake to go-live. A recruiter or hiring manager must understand this in under 2 minutes.
@@ -128,7 +132,7 @@ interface SlaPolicy {
 }
 
 interface Condition { field: keyof Ticket | "customer.tier" | "body"; op: "is" | "is_not" | "contains" | "in"; value: string | string[]; }
-interface Action { type: "set_group" | "set_priority" | "add_tag" | "set_status" | "notify_lead"; value: string; }
+interface Action { type: "set_group" | "set_priority" | "add_tag" | "set_status" | "notify_lead" | "add_internal_note"; value: string; }
 
 interface Trigger { id: string; name: string; order: number; active: boolean; all: Condition[]; any: Condition[]; actions: Action[]; }
 interface EscalationRule { id: string; name: string; when: "sla_warning" | "sla_breached" | "reopened_twice" | "bad_csat"; actions: Action[]; }
@@ -172,7 +176,7 @@ The sandbox is the live demo. A visitor creates a ticket and watches the rules a
 
 **6.1 Create ticket form.** Fields: customer (pick or new), tier, channel, category, subject, body, priority (optional). A "Fill example" button loads one of 5 preset scenarios, for example an enterprise customer with an urgent license failure.
 
-**6.2 Routing triggers.** Triggers run in `order` on create and on every update. The first matching `set_group` wins. Seed these 8 triggers:
+**6.2 Routing triggers.** Triggers run in `order` on create and on every update. The first matching `set_group` wins. Each trigger fires at most once per ticket (fire-once guard). This stops repeat timeline lines, and it stops routing from undoing an escalation on a later update. Seed these 8 triggers:
 
 | # | Name | Conditions | Actions |
 | --- | --- | --- | --- |
@@ -195,7 +199,9 @@ After routing, assign the ticket round-robin to an on-shift agent in the group. 
 | Business | tier business | 1 h / 8 h | 2 h / 16 h | 8 h / 40 h | 16 h / 72 h | 08:00 to 20:00, Mon to Sat |
 | Standard | all others | 2 h / 16 h | 4 h / 24 h | 12 h / 48 h | 24 h / 96 h | 08:00 to 20:00, Mon to Fri |
 
-The first value is first reply time. The second is resolution time. The clock counts business minutes only. The clock pauses when status is pending or on_hold.
+The first value is first reply time. The second is resolution time. The clock counts business minutes only. The clock pauses when status is pending or on_hold. The clock does not run when status is solved or closed.
+
+**Reopened tickets.** When a ticket reopens, the resolution clock continues from its saved total. It does not restart. A met first reply target stays met.
 
 Show each timer as a badge: green (more than 25% of target left), amber (25% or less left: write sla_warning), red (breached: write sla_breached).
 
@@ -204,11 +210,11 @@ Show each timer as a badge: green (more than 25% of target left), amber (25% or 
 - On sla_warning: notify lead, add tag sla_risk.
 - On sla_breached: set group Escalations, notify lead.
 - When a ticket reopens twice: add tag repeat_contact, notify lead.
-- On bad CSAT: add tag csat_followup, create an internal note "Lead to review within 1 business day."
+- On bad CSAT: add tag csat_followup, create an internal note "Lead to review within 1 business day." (action `add_internal_note`).
 
 "Notify lead" only writes an event and shows a toast. It sends nothing.
 
-**6.5 Macros.** Seed 6 macros, one per category plus "Request more info" (sets status pending). Applying a macro adds the reply text and runs its actions.
+**6.5 Macros.** Seed 6 macros: one for each of the 5 categories other than "other", plus "Request more info" (sets status pending). Applying a macro adds the reply text and runs its actions.
 
 **6.6 Time controls.** The sandbox has a clock bar: Play, Pause, and "+15 min", "+1 h", "+1 day". This lets a visitor see an SLA warning and breach in seconds. A "Reset sandbox" button restores the seed state.
 
@@ -224,7 +230,7 @@ The dashboard shows the before and after go-live story. A vertical line marks go
 | --- | --- |
 | Tickets created | Count of tickets by createdAt |
 | First reply time (median) | Business minutes from createdAt to firstReplyAt, median |
-| Resolution time (median) | Business minutes from createdAt to solvedAt, pending time excluded, median |
+| Resolution time (median) | Business minutes from createdAt to solvedAt, pending and on_hold time excluded, median. Uses the same business-minutes function as the SLA resolution clock |
 | SLA breach rate | Tickets with any sla_breached event / tickets with an SLA policy |
 | CSAT | Good ratings / all ratings, as % |
 | Reassignment rate | Tickets with more than 1 assigned event / all tickets |

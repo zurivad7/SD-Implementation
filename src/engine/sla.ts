@@ -2,9 +2,12 @@
 //
 // - The first matching policy applies.
 // - The clock counts business minutes only, in the policy's business hours.
-// - The clock runs while the status is new or open. It pauses in pending and on_hold
-//   (and does not run while the ticket is solved or closed).
-// - First reply clock: createdAt to the first public reply. Resolution clock: createdAt to solvedAt.
+// - The clock runs while the status is new or open. It pauses in pending and on_hold,
+//   and does not run while the ticket is solved or closed.
+// - First reply clock: createdAt to the first public reply. Once met, it stays met.
+// - Resolution clock: createdAt to solvedAt. When a ticket reopens, the clock continues from its
+//   saved total. It does not restart.
+// - clockMinutes() is the one business-minutes function. The SLA timers and the resolution KPI both use it.
 // - Badge: ok (green) with more than 25% of the target left, warning (amber) at 25% or less,
 //   breached (red) at 0% or less. A stopped clock within target is "met".
 import type { Customer, SlaPolicy, Status, Ticket, TicketEvent } from "../types";
@@ -85,11 +88,15 @@ export interface SlaTimer {
   dueAt: string | null;
 }
 
+/** Business minutes the clock for `metric` has run by `now`, in the given business hours. */
+export function clockMinutes(ticket: Ticket, metric: SlaMetric, hours: SlaPolicy["businessHours"], now: number): number {
+  return runningSegments(ticket, metric, now).reduce((sum, s) => sum + businessMinutesBetween(s.from, s.to, hours), 0);
+}
+
 export function slaTimer(ticket: Ticket, policy: SlaPolicy, metric: SlaMetric, now: number): SlaTimer {
   const target = policy.targets[ticket.priority];
   const targetMins = metric === "first_reply" ? target.firstReplyMins : target.resolutionMins;
-  const segments = runningSegments(ticket, metric, now);
-  const elapsedMins = segments.reduce((sum, s) => sum + businessMinutesBetween(s.from, s.to, policy.businessHours), 0);
+  const elapsedMins = clockMinutes(ticket, metric, policy.businessHours, now);
   const remainingMins = targetMins - elapsedMins;
   const fractionLeft = remainingMins / targetMins;
   const stopped = stopTime(ticket, metric) !== null;

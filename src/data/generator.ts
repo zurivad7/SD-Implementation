@@ -330,6 +330,21 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
     steps.push({ ms: solveMs, to: "solved", role: "owner", detail: (who) => `${who} solved the ticket. Status changed from Open to Solved.` });
   }
 
+  // ---- reopens. The resolution clock continues from its saved total; it does not restart.
+  let lastSolveMs = solveMs;
+  const reopenRoll = rng();
+  const reopens = reopenRoll < 0.012 ? 2 : reopenRoll < 0.06 ? 1 : 0;
+  for (let i = 1; i <= reopens; i++) {
+    const reopenMs = lastSolveMs + Math.round(between(rng, 3 * 60, 3 * 24 * 60)) * MINUTE_MS;
+    steps.push({ ms: reopenMs, to: "open", role: "customer", detail: () => "Customer replied after the ticket was solved. Status changed from Solved to Open." });
+    if (after && i === 2) {
+      add(reopenMs, { type: "escalated", actor: "system", ruleId: "e3", detail: "Escalation rule \"Reopened twice\" fired: added tag repeat_contact, notified the lead." }, { tags: ["repeat_contact"] });
+    }
+    lastSolveMs = addBusinessMinutes(reopenMs, intBetween(rng, 20, 300), hours);
+    segments.push({ from: reopenMs, to: lastSolveMs });
+    steps.push({ ms: lastSolveMs, to: "solved", role: "owner", detail: (who) => `${who} solved the ticket again. Status changed from Open to Solved.` });
+  }
+
   // ---- SLA warnings and breaches, derived from the planned timestamps
   type SlaHit = { ms: number; kind: "sla_warning" | "sla_breached"; which: "first reply" | "resolution" };
   const hits: SlaHit[] = [];
@@ -337,8 +352,8 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
   if (firstReplyMs > firstBreachMs) hits.push({ ms: firstBreachMs, kind: "sla_breached", which: "first reply" });
   const resWarnMs = instantAtActiveMinutes(segments, target.resolutionMins * 0.75, policy);
   const resBreachMs = instantAtActiveMinutes(segments, target.resolutionMins, policy);
-  if (resWarnMs !== null && resWarnMs < solveMs) hits.push({ ms: resWarnMs, kind: "sla_warning", which: "resolution" });
-  if (resBreachMs !== null && resBreachMs < solveMs) hits.push({ ms: resBreachMs, kind: "sla_breached", which: "resolution" });
+  if (resWarnMs !== null && resWarnMs < lastSolveMs) hits.push({ ms: resWarnMs, kind: "sla_warning", which: "resolution" });
+  if (resBreachMs !== null && resBreachMs < lastSolveMs) hits.push({ ms: resBreachMs, kind: "sla_breached", which: "resolution" });
   hits.sort((a, b) => a.ms - b.ms);
 
   let warned = false;
@@ -364,20 +379,7 @@ function buildTicket(ctx: Ctx, id: number, createdMs: number, dayIndex: number, 
   }
   const anyBreach = hits.some((h) => h.kind === "sla_breached");
 
-  // ---- reopens (after the first solve), CSAT, auto close
-  let lastSolveMs = solveMs;
-  const reopenRoll = rng();
-  const reopens = reopenRoll < 0.012 ? 2 : reopenRoll < 0.06 ? 1 : 0;
-  for (let i = 1; i <= reopens; i++) {
-    const reopenMs = lastSolveMs + Math.round(between(rng, 3 * 60, 3 * 24 * 60)) * MINUTE_MS;
-    steps.push({ ms: reopenMs, to: "open", role: "customer", detail: () => "Customer replied after the ticket was solved. Status changed from Solved to Open." });
-    if (after && i === 2) {
-      add(reopenMs, { type: "escalated", actor: "system", ruleId: "e3", detail: "Escalation rule \"Reopened twice\" fired: added tag repeat_contact, notified the lead." }, { tags: ["repeat_contact"] });
-    }
-    lastSolveMs = addBusinessMinutes(reopenMs, intBetween(rng, 20, 300), hours);
-    steps.push({ ms: lastSolveMs, to: "solved", role: "owner", detail: (who) => `${who} solved the ticket again. Status changed from Open to Solved.` });
-  }
-
+  // ---- CSAT, auto close
   let csat: Ticket["csat"] = null;
   const csatMs = lastSolveMs + Math.round(between(rng, 60, 72 * 60)) * MINUTE_MS;
   const wantsCsat = rng() < 0.27;

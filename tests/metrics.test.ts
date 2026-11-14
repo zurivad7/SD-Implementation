@@ -38,7 +38,7 @@ const T: Ticket[] = [
   // T6: reply at 20, solved 12:20 with a 2nd reply. Resolution 140. CSAT good. Billing.
   mk(6, { groupId: "billing", status: "solved", firstReplyAt: at("10:20"), solvedAt: at("12:20"), csat: { score: "good" } },
     [ev.assigned(at("10:01")), ev.reply(at("10:20")), ev.status(at("10:20"), "new", "open"), ev.reply(at("12:20")), ev.status(at("12:20"), "open", "solved"), ev.csat(at("13:00"), "good")]),
-  // T7: reply at 40, on-hold 10:40 to 12:40 (counts: only pending is excluded), solved 13:40. Resolution 220. CSAT good. Billing.
+  // T7: reply at 40, on-hold 10:40 to 12:40 (excluded), solved 13:40. Resolution 40 + 60 = 100. CSAT good. Billing.
   mk(7, { groupId: "billing", status: "solved", firstReplyAt: at("10:40"), solvedAt: at("13:40"), csat: { score: "good" } },
     [ev.assigned(at("10:01")), ev.reply(at("10:40")), ev.status(at("10:40"), "new", "on_hold"), ev.status(at("12:40"), "on_hold", "open"),
       ev.reply(at("13:40")), ev.status(at("13:40"), "open", "solved"), ev.csat(at("14:00"), "good")]),
@@ -62,7 +62,7 @@ const T: Ticket[] = [
 describe("metrics on a 10-ticket fixture", () => {
   it("per-ticket first reply and resolution times", () => {
     expect(T.map((t) => firstReplyMins(t, SLA_POLICIES))).toEqual([30, 60, 10, 120, null, 20, 40, 5, 50, 90]);
-    expect(T.map((t) => resolutionMins(t, SLA_POLICIES))).toEqual([60, 120, 10, null, null, 140, 220, 5, 50, null]);
+    expect(T.map((t) => resolutionMins(t, SLA_POLICIES))).toEqual([60, 120, 10, null, null, 140, 100, 5, 50, null]);
   });
 
   it("each KPI matches the hand-computed value", () => {
@@ -70,7 +70,7 @@ describe("metrics on a 10-ticket fixture", () => {
       ticketsCreated: 10,
       // first replies sorted: 5 10 20 30 40 50 60 90 120, middle value 40
       medianFirstReplyMins: 40,
-      // resolutions sorted: 5 10 50 60 120 140 220, middle value 60
+      // resolutions sorted: 5 10 50 60 100 120 140, middle value 60
       medianResolutionMins: 60,
       // breached T2, T4 / 9 tickets with a policy (T5 has none)
       slaBreachRate: 2 / 9,
@@ -124,5 +124,21 @@ describe("metrics on a 10-ticket fixture", () => {
     expect(filterTickets(T, {}, customers)).toHaveLength(10);
     const split = splitByGoLive(T, "2026-11-05");
     expect([split.before.length, split.after.length]).toEqual([9, 1]);
+  });
+});
+
+describe("resolution KPI uses the SLA clock", () => {
+  it("excludes time spent solved before a reopen", () => {
+    const t = ticket({
+      createdAt: at("10:00"), slaPolicyId: "sla_enterprise", status: "solved", firstReplyAt: at("10:10"), solvedAt: at("15:30"),
+      events: [
+        { at: at("10:00"), type: "created", actor: "customer", detail: "Customer created the ticket by email." },
+        ev.reply(at("10:10")), ev.status(at("10:10"), "new", "open"),
+        ev.status(at("11:00"), "open", "solved"), // 60 min
+        ev.status(at("15:00"), "solved", "open"), // 4 h solved: not counted
+        ev.status(at("15:30"), "open", "solved"), // + 30 min
+      ],
+    });
+    expect(resolutionMins(t, SLA_POLICIES)).toBe(90);
   });
 });
