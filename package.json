@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:content": "tsx scripts/check-content.ts",
-    "check:a11y": "npm run build && tsx scripts/check-a11y.ts"
+    "check:a11y": "npm run build && tsx scripts/check-a11y.ts",
+    "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

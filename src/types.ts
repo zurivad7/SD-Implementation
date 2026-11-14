@@ -98,7 +98,8 @@ export interface SlaPolicy {
 }
 
 export interface Condition {
-  field: keyof Ticket | "customer.tier" | "body";
+  /** "customer.language" is added to the spec union: trigger 7 (Dutch language) needs it. */
+  field: keyof Ticket | "customer.tier" | "customer.language" | "body";
   op: "is" | "is_not" | "contains" | "in";
   value: string | string[];
 }
