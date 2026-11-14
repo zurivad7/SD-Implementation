@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-size: 16px;
+}
+
+body {
+  @apply bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased;
+}
+
+/* Visible keyboard focus on every interactive element (WCAG 2.1 AA). */
+:focus-visible {
+  outline: 3px solid #2856c7;
+  outline-offset: 2px;
+}
+.dark :focus-visible {
+  outline-color: #8fb0f5;
+}
